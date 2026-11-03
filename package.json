@@ -1,0 +1,70 @@
+{
+  "name": "@originchain/sdk",
+  "version": "1.0.0-rc.1",
+  "description": "Official OriginChainDB TypeScript and JavaScript SDK for SQL, vector search, full-text search, and graph queries.",
+  "license": "MIT",
+  "author": "Silicoyn Technologies <support@originchain.ai>",
+  "homepage": "https://originchaindb.com/docs/sdk/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/originchaindb/originchaindb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/originchaindb/originchaindb/issues"
+  },
+  "keywords": [
+    "originchaindb",
+    "originchain",
+    "typescript",
+    "javascript",
+    "database",
+    "sql",
+    "vector",
+    "fts",
+    "graph"
+  ],
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run lint && npm test && npm run build",
+    "test:browser": "playwright test",
+    "test:examples": "node scripts/check_examples.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "tsup": "8.5.0",
+    "typescript": "^5.6.0",
+    "vite": "6.4.5",
+    "vitest": "4.1.12"
+  },
+  "originchain": {
+    "engine_min": "1.0.0",
+    "engine_max": "1.x"
+  },
+  "dependencies": {
+    "lossless-json": "4.3.3"
+  }
+}
