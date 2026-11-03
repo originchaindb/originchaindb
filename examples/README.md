@@ -1,4 +1,17 @@
-# Run a query
+# Examples
+
+The [catalog program](catalog.mjs) creates `sdk_examples.products`, writes
+two products, and demonstrates SQL, vector search, full-text search, and graph
+neighbors. It uses [products.toml](products.toml). Run it only against a development
+database after setting `OC_URL` and `OC_TOKEN`:
+
+```sh
+node examples/catalog.mjs
+```
+
+See the [main README](../README.md#product-catalog-example) for setup and explanations.
+
+## Read-only query commands
 
 From the repository root, install/build the local SDK:
 
@@ -17,7 +30,8 @@ Set two variables: `OC_URL`, your database's address from Connect, and `OC_TOKEN
 | `node examples/query.mjs vector` | `OC_TABLE`, `OC_QUERY_VECTOR` | Vectors indexed with cosine distance. Query dimension/model must match. |
 | `node examples/query.mjs graph` | `OC_TABLE`, `OC_RELATION`, `OC_NODE_ID` | A registered relation and source node. |
 
-With an access token, `sql` uses a path that is supported today. The `fts`, `vector` and `graph` commands are not yet covered for access tokens.
+Feature availability depends on the deployed database and the token's grants.
+These examples do not validate token creation or revocation.
 
 For example, a two-dimensional toy index can use `OC_QUERY_VECTOR=[1,0]`. It is an illustration of the wire input, not an embedding model. Use real model output for real data. Table names may be `namespace.table`; identifiers are validated before use. The commands only read; they do not create schemas, insert fixtures, or delete user data. Empty search output can simply mean no matches.
 

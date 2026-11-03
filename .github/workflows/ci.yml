@@ -53,6 +53,8 @@ jobs:
           node-version: ${{ matrix.runtime }}
       - name: HTTP contract
         run: python tests/contract/run.py -- node tests/consumer.mjs
+      - name: Check example syntax
+        run: node --check examples/catalog.mjs
       - name: Build package
         run: npm pack --ignore-scripts
 
