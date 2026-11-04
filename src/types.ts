@@ -486,6 +486,10 @@ export type ClientOptions = {
    * as `Authorization: Bearer <token>`. It reaches data once its owner has a
    * database identity on this database. */
   token?: string;
+  /** Resolve current credentials once per call. Mutually exclusive with token/bearer. */
+  tokenProvider?: import("./integration.js").TokenProvider;
+  /** Local, redacted request observation; does not enable the engine diagnostics exporter. */
+  onRequest?: (event: import("./integration.js").RequestEvent) => void;
   /** @deprecated Use `url` (OC_URL). The engine origin; the SDK appends
    * `/v1/tenants/<tenantId>` to it. Will be removed. */
   baseUrl?: string;

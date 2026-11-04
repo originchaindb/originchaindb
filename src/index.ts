@@ -83,7 +83,9 @@ export type {
   VecTopkReq,
 } from "./types.js";
 
-export { BatchError, ProtocolError } from "./sql.js";
+export { BatchError, ProtocolError, RowDecodeError, mapRows } from "./sql.js";
+export { CredentialError } from "./integration.js";
+export type { RequestEvent, TokenProvider } from "./integration.js";
 export type { SqlApi, SqlResult } from "./sql.js";
 export type { FtsHit, FtsResult } from "./search.js";
 export type { FtsSearchOptions, VectorSearchOptions } from "./resources.js";

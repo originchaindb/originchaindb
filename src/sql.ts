@@ -14,6 +14,23 @@ export interface SqlResult {
   raw: Record<string, unknown>;
 }
 
+/** Conversion failed at a zero-based row index. The message omits row data. */
+export class RowDecodeError extends Error {
+  constructor(readonly row: number, override readonly cause: unknown) {
+    super(`Cannot decode SQL row ${row}`);
+    this.name = "RowDecodeError";
+  }
+}
+
+/** Map independent row copies through an application decoder or schema validator.
+ * TypeScript annotations alone do not validate values. No partial list is returned. */
+export function mapRows<T>(result: SqlResult, decode: (row: Readonly<Record<string, unknown>>) => T): T[] {
+  return result.rows.map((row, index) => {
+    try { return decode(structuredClone(row)); }
+    catch (error) { throw new RowDecodeError(index, error); }
+  });
+}
+
 /** A batch can partially succeed. Inspect result before retrying any statement. */
 export class BatchError extends ApiError {
   constructor(readonly result: SqlResult) {

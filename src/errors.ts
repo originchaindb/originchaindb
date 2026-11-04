@@ -15,6 +15,8 @@ export class ApiError extends Error {
   /** The engine's id for the request (`x-oc-request-id`), when it answered with
    * one. Quote it in a support request: it identifies the exact engine record. */
   requestId?: string;
+  /** Raw Retry-After header when the server supplies one; no automatic retry implied. */
+  retryAfter?: string;
   /** The id this client sent for the call (`x-oc-logical-request-id`). */
   logicalRequestId?: string;
 

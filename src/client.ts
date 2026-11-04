@@ -1,4 +1,5 @@
 import { createSqlApi, type SqlApi } from "./sql.js";
+import { abortable, CredentialError, observe, operation, type RequestEvent, type TokenProvider } from "./integration.js";
 import { parse, isSafeNumber } from "lossless-json";
 import { Rows, Schemas, Vector, Fts, segment } from "./resources.js";
 // OriginChain TypeScript client.
@@ -278,6 +279,8 @@ export class OriginChainClient {
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
   private readonly diagnostics: DiagnosticsQueue | undefined;
+  private readonly tokenProvider: TokenProvider | undefined;
+  private readonly onRequest: ((event: RequestEvent) => void) | undefined;
   /** What `_request` paths are appended to: `url`, or `baseUrl` in legacy mode. */
   private readonly root: string;
   /** Legacy mode only: the tenant path prefix the deprecated options imply. */
@@ -298,6 +301,9 @@ export class OriginChainClient {
    * map instead, for example a Workers `env` binding. */
   static fromEnv(options: FromEnvOptions = {}): OriginChainClient {
     const { env, ...rest } = options;
+    if (rest.tokenProvider) {
+      return new OriginChainClient({ ...rest, url: (env ?? processEnv() ?? {}).OC_URL });
+    }
     const resolved = connectionFromEnv(env ?? processEnv() ?? {});
     const { token, ...address } = resolved;
     return new OriginChainClient({ ...rest, ...address, token });
@@ -318,7 +324,11 @@ export class OriginChainClient {
       throw new Error("OriginChainClient: url required (OC_URL, the database's address from Connect)");
     }
     let token: string;
-    if (opts.token !== undefined) {
+    if (opts.tokenProvider !== undefined) {
+      if (typeof opts.tokenProvider !== "function" || opts.token !== undefined || opts.bearer !== undefined)
+        throw new TypeError("Configure tokenProvider or token, not both");
+      token = "";
+    } else if (opts.token !== undefined) {
       token = checkToken(opts.token, "token");
     } else if (opts.bearer) {
       token = opts.bearer;
@@ -333,6 +343,8 @@ export class OriginChainClient {
     this.identityHeaders = opts.dbUser !== undefined
       ? { "x-oc-db-user": opts.dbUser, "x-oc-db-key": opts.dbKey! } : {};
     this.bearer = token;
+    this.tokenProvider = opts.tokenProvider;
+    this.onRequest = opts.onRequest;
     if (legacy) {
       // Deprecated: unchanged behaviour for one release.
       this.baseUrl = opts.baseUrl!.replace(/\/$/, "");
@@ -386,16 +398,17 @@ export class OriginChainClient {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
+      const token = this.tokenProvider ? await this.resolveToken(ctrl.signal) : this.bearer;
       await this.fetch(
         joinUrl(this.root, this._door(DIAGNOSTICS_PATH_SUFFIX)),
         {
           method: "POST",
           headers: {
             ...this.identityHeaders,
-            authorization: `Bearer ${this.bearer}`,
+            authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          redirect: this.identityHeaders["x-oc-db-user"] ? "error" : "follow",
+          redirect: this.identityHeaders["x-oc-db-user"] ? "error" : "manual",
           body: JSON.stringify({ events: batch }),
           signal: ctrl.signal,
         },
@@ -406,6 +419,18 @@ export class OriginChainClient {
   }
 
   // ── Internal request plumbing ──────────────────────────────────────────
+
+  private async resolveToken(signal: AbortSignal): Promise<string> {
+    signal.throwIfAborted();
+    if (!this.tokenProvider) return this.bearer;
+    try {
+      const pending = Promise.resolve().then(() => { signal.throwIfAborted(); return this.tokenProvider!(signal); });
+      return checkToken(await abortable(pending, signal), "tokenProvider");
+    } catch {
+      signal.throwIfAborted();
+      throw new CredentialError();
+    }
+  }
 
   /** @internal The `_request` path for a door path such as `/sql`: the door
    * path itself with `url`, or the tenant path the deprecated options imply. */
@@ -419,6 +444,10 @@ export class OriginChainClient {
     path: string,
     init: RequestInit & { rawBody?: boolean; retrySafe?: boolean } = {},
   ): Promise<T> {
+    const requestStarted = now();
+    let observedStatus: number | undefined;
+    let observedId: string | undefined;
+    let errorKind: string | undefined;
     const headers = requestHeaders({
       ...this.identityHeaders,
       authorization: `Bearer ${this.bearer}`,
@@ -463,6 +492,7 @@ export class OriginChainClient {
       return now() < deadline;
     };
     try {
+      if (this.tokenProvider) headers.authorization = `Bearer ${await this.resolveToken(cancellation.signal)}`;
       for (let attempt = 0; ; attempt++) {
         const startedAt = now();
         if (!inBrowser()) headers["x-oc-attempt"] = String(attempt + 1);
@@ -477,6 +507,8 @@ export class OriginChainClient {
             headers: { ...headers },
             signal: cancellation.signal,
           });
+          observedStatus = res.status;
+          observedId = res.headers.get("x-oc-request-id") ?? undefined;
           body = await readBody(res);
         } catch (err) {
           report?.push(diagnosticEvent({ ...event, failure: cancellation.failure() }));
@@ -490,6 +522,7 @@ export class OriginChainClient {
           } catch (err) {
             if (err instanceof ApiError) {
               err.requestId = requestId;
+              err.retryAfter = res.headers.get("retry-after") ?? undefined;
               err.logicalRequestId = logicalRequestId;
             }
             report?.push(diagnosticEvent({
@@ -504,8 +537,17 @@ export class OriginChainClient {
         report?.push(diagnosticEvent({ ...event, status: res.status, requestId }));
         return body as T;
       }
+    } catch (error) {
+      errorKind = cancellation.signal.aborted ? (cancellation.failure() === "timeout" ? "timeout" : "canceled")
+        : error instanceof CredentialError ? "credential"
+        : error instanceof ApiError ? ({401: "authentication", 403: "permission", 429: "rate_limit"}[error.status] ?? "http")
+        : error instanceof SyntaxError ? "protocol" : "transport";
+      throw error;
     } finally {
       cancellation.cleanup();
+      const door = this.legacyPrefix && path.startsWith(this.legacyPrefix) ? path.slice(this.legacyPrefix.length) : path;
+      observe(this.onRequest, { method, operation: operation(door), durationMs: now() - requestStarted,
+        status: observedStatus, requestId: observedId, errorKind });
     }
   }
 

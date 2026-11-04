@@ -60,10 +60,6 @@
     "vite": "6.4.5",
     "vitest": "4.1.12"
   },
-  "originchain": {
-    "engine_min": "1.0.0",
-    "engine_max": "1.x"
-  },
   "dependencies": {
     "lossless-json": "4.3.3"
   }
