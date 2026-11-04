@@ -64,6 +64,10 @@ Replace the placeholders, keep credentials out of source control, and use a
 secret manager for deployed applications. HTTPS is required except for local
 loopback development. SQL tools use a separate database login from Connect.
 
+For a newly created token, wait for its database access state to become **active**.
+Its linked database identity still controls table access, row policies and masks.
+See [token setup, rotation and revocation](docs/authentication.md).
+
 Save this as `app.mjs` and run `node app.mjs`, or use it in your TypeScript application.
 
 ```typescript
