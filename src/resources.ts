@@ -1,3 +1,4 @@
+import { writeBatches, pages, scan, type BatchOptions, type PageOptions } from "./iteration.js";
 import type { OriginChainClient } from "./client.js";
 import type { RequestOptions, VecMetric } from "./types.js";
 import { requestOptions } from "./transport.js";
@@ -12,6 +13,12 @@ export function segment(value: string): string {
 
 export class Rows {
   constructor(private readonly client: OriginChainClient) {}
+  writeBatches(schema: string, rows: Iterable<Record<string, unknown>> | AsyncIterable<Record<string, unknown>>, options: BatchOptions = {}) {
+    return writeBatches(this.client, schema, rows, options);
+  }
+  pages(schema: string, key: string, options: PageOptions = {}) { return pages(this.client, schema, key, options); }
+  scan(schema: string, key: string, options: PageOptions = {}) { return scan(this.client, schema, key, options); }
+
   get(schema: string, key: string, options: RequestOptions = {}): Promise<Record<string, unknown> | null> {
     return this.client._request(this.client._door(`/rows/${segment(schema)}/${segment(key)}`), requestOptions(options));
   }

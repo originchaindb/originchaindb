@@ -90,3 +90,6 @@ export type { SqlApi, SqlResult } from "./sql.js";
 export type { FtsHit, FtsResult } from "./search.js";
 export type { FtsSearchOptions, VectorSearchOptions } from "./resources.js";
 export type { VectorHit } from "./vector.js";
+
+export { BatchWriteError } from "./iteration.js";
+export type { BatchResult, BatchOptions, RowPage, PageOptions } from "./iteration.js";
