@@ -7,6 +7,7 @@ assume an existing `demo.items` schema and an appropriate search index.
 const result = await db.sql.run("SELECT $1 AS value", [7]);
 const row = await db.rows.get("demo.items", "one");
 const vectors = await db.vector.search("demo.items", [1, 0]);
+const indexed = await db.vectorIndexes.search("products", "catalog", { k: 5, vector: [1, 0] });
 const text = await db.fts.search("demo.items", "body", "hello");
 const graph = await db.graph.query("MATCH (n) RETURN $name", { name: "one" });
 ```

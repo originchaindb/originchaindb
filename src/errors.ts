@@ -2,8 +2,10 @@
 //
 // All non-2xx responses are normalised into an `ApiError` (or one of its
 // subclasses). Calling code can branch on `instanceof ApiError` for the
-// generic case and `instanceof OCAddonRequiredError` /
-// `OCPaymentRequiredError` for the specific 402 add-on flow.
+// generic case, `instanceof OCAddonRequiredError` /
+// `OCPaymentRequiredError` for the specific 402 add-on flow, and
+// `instanceof OCRecordApiNotEnabledError` for a database that does not serve
+// the vector index record operations.
 
 export type ApiErrorBody = {
   error?: { code?: string; message?: string } | string;
@@ -19,6 +21,15 @@ export class ApiError extends Error {
   retryAfter?: string;
   /** The id this client sent for the call (`x-oc-logical-request-id`). */
   logicalRequestId?: string;
+  /** `error.details.reason` from the server's structured error envelope (for
+   * example `"exact_index_capacity"`), when it sent one. Branch on `code` plus
+   * `reason`, never on `status` alone. */
+  reason?: string;
+  /** The envelope's `error.details` object, when present. */
+  details?: Record<string, unknown>;
+  /** The envelope's `error.retryable`: `true` only when the identical request
+   * can succeed later without changes. */
+  retryable?: boolean;
 
   constructor(status: number, code: string, message: string) {
     super(message);
@@ -26,6 +37,39 @@ export class ApiError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+/** HTTP 501 with `reason === "record_api_not_enabled"`: this database does not
+ * serve the vector index record operations (`client.vectorIndexes`). Not
+ * retryable: the same request keeps failing until the operations are switched
+ * on for the database. The per-table `client.vector` calls are not affected. */
+export class OCRecordApiNotEnabledError extends ApiError {
+  constructor(code: string, message: string) {
+    super(501, code, message);
+    this.name = "OCRecordApiNotEnabledError";
+  }
+}
+
+/** @internal The structured error envelope's `error` object:
+ * `{"error": {"code", "message", "status", "retryable", "details"}}`. */
+export function errorEnvelope(body: unknown): Record<string, unknown> | undefined {
+  const error = body !== null && typeof body === "object" ? (body as { error?: unknown }).error : undefined;
+  return error !== null && typeof error === "object" && !Array.isArray(error)
+    ? (error as Record<string, unknown>) : undefined;
+}
+
+/** @internal Copy `details`, `reason` and `retryable` from a structured error
+ * envelope onto an error. Fields the server did not send stay unset. */
+export function applyErrorEnvelope(error: ApiError, body: unknown): void {
+  const envelope = errorEnvelope(body);
+  if (!envelope) return;
+  const details = envelope.details;
+  if (details !== null && typeof details === "object" && !Array.isArray(details)) {
+    error.details = details as Record<string, unknown>;
+    const reason = (details as { reason?: unknown }).reason;
+    if (typeof reason === "string") error.reason = reason;
+  }
+  if (typeof envelope.retryable === "boolean") error.retryable = envelope.retryable;
 }
 
 // HTTP 402 Payment Required + canonical add-on body. Mirrors the wire shape

@@ -18,7 +18,7 @@ export class CredentialError extends Error {
 
 export function operation(path: string): string {
   const first = path.replace(/^\//, "").split(/[/?]/, 1)[0];
-  return ["sql", "rows", "schemas", "vector", "fts", "graph", "cypher", "usage", "query-metrics"].includes(first ?? "") ? first! : "other";
+  return ["sql", "rows", "schemas", "vector", "vector-indexes", "fts", "graph", "cypher", "usage", "query-metrics"].includes(first ?? "") ? first! : "other";
 }
 
 export function observe(callback: ((event: RequestEvent) => void) | undefined, event: RequestEvent): void {

@@ -21,10 +21,14 @@ import { checkAddress, checkToken, connectionFromEnv, processEnv } from "./conne
 import {
   ApiError,
   type ApiErrorBody,
+  applyErrorEnvelope,
+  errorEnvelope,
   isAddonRequiredBody,
   OCAddonRequiredError,
   OCPaymentRequiredError,
+  OCRecordApiNotEnabledError,
 } from "./errors.js";
+import { VectorIndexes } from "./vector-indexes.js";
 import {
   DIAGNOSTICS_PATH_SUFFIX,
   type DiagnosticEvent,
@@ -206,9 +210,15 @@ async function readBody(res: Response): Promise<unknown> {
 
 /** Map an HTTP response into an `ApiError` subclass. Always throws. */
 function raiseFor(status: number, body: unknown): never {
+  const error = errorFor(status, body);
+  applyErrorEnvelope(error, body);
+  throw error;
+}
+
+function errorFor(status: number, body: unknown): ApiError {
   // 402 + canonical add-on body → typed error.
   if (status === 402 && isAddonRequiredBody(body)) {
-    throw new OCAddonRequiredError(
+    return new OCAddonRequiredError(
       body.msg ?? `This endpoint requires the ${body.name} add-on.`,
       body.addon,
       body.name,
@@ -223,10 +233,11 @@ function raiseFor(status: number, body: unknown): never {
       (body && typeof body === "object" && "msg" in body
         ? String((body as { msg?: unknown }).msg ?? "")
         : "") || "payment required";
-    throw new OCPaymentRequiredError(msg, body);
+    return new OCPaymentRequiredError(msg, body);
   }
   let code = "http_error";
   let message = `HTTP ${status}`;
+  const envelope = errorEnvelope(body);
   if (body && typeof body === "object") {
     const e = body as ApiErrorBody;
     if (typeof e.error === "string") {
@@ -234,14 +245,21 @@ function raiseFor(status: number, body: unknown): never {
       // that into the `code` slot so callers can switch on it.
       code = e.error;
       message = e.error;
-    } else if (e.error && typeof e.error === "object") {
-      code = e.error.code ?? code;
-      message = e.error.message ?? message;
+    } else if (envelope) {
+      // The structured envelope: its `message`, else its `code`.
+      if (typeof envelope.code === "string" && envelope.code) code = envelope.code;
+      if (typeof envelope.message === "string" && envelope.message) message = envelope.message;
+      else if (typeof envelope.code === "string" && envelope.code) message = envelope.code;
     }
   } else if (typeof body === "string" && body) {
     message = body;
   }
-  throw new ApiError(status, code, message);
+  const details = envelope?.details;
+  if (status === 501 && details !== null && typeof details === "object" &&
+      (details as { reason?: unknown }).reason === "record_api_not_enabled") {
+    return new OCRecordApiNotEnabledError(code, message);
+  }
+  return new ApiError(status, code, message);
 }
 
 // ── Engine client ────────────────────────────────────────────────────────
@@ -258,6 +276,9 @@ export class OriginChainClient {
   readonly rows: Rows;
   readonly schemas: Schemas;
   readonly vector: Vector;
+  /** Record operations on vector indexes (`<url>/vector-indexes/...`): indexes,
+   * namespaces, records, jobs and dense, sparse, keyword and hybrid search. */
+  readonly vectorIndexes: VectorIndexes;
   readonly fts: Fts;
   /** The database's address with any trailing slash removed. Every database
    * call appends its door path to it, for example `<url>/sql`. With the
@@ -379,6 +400,7 @@ export class OriginChainClient {
     this.rows = new Rows(this);
     this.schemas = new Schemas(this);
     this.vector = new Vector(this);
+    this.vectorIndexes = new VectorIndexes(this);
     this.fts = new Fts(this);
     this.graph = new GraphMethods(this);
     this.diagnostics = opts.diagnostics

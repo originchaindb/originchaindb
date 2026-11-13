@@ -62,6 +62,8 @@ jobs:
           node-version: ${{ matrix.runtime }}
       - name: HTTP contract
         run: python tests/contract/run.py -- node tests/consumer.mjs
+      - name: Vector index HTTP contract
+        run: python tests/contract/vector_indexes.py -- node tests/vector_indexes_consumer.mjs
       - name: Resilience contract
         run: python tests/contract/resilience.py -- node tests/resilience.mjs
       - name: Check example syntax

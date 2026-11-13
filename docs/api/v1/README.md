@@ -13,6 +13,7 @@ for complete signatures, native types and language-specific helpers.
 | Schemas | `schemas.list / schemas.get / schemas.register` |
 | Rows | `rows.get / rows.put / rows.putBatch`  `writeBatches / pages / scan` |
 | Vectors | `vector.put / vector.search / vector.delete` |
+| Vector indexes | `vectorIndexes`: indexes, namespaces, `upsert / upsertBatches`, `fetch / fetchByFilter / listIds / count`, `update / updateByFilter`, `delete / deleteByFilter / deleteAll`, jobs, `search` |
 | Full-text search | `fts.index / fts.search` |
 | Graph | `graph.query / graph.neighbors / graph.bfs` |
 | Usage and query metrics | `usage / queryMetrics` |
