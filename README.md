@@ -163,6 +163,10 @@ for (const hit of hits) console.log(hit.id, hit.score);
 Each hit exposes an ID, score, optional metadata, and the original hit. Do not
 assume the score is a probability; its interpretation depends on the metric.
 
+These calls store vectors per table. For named indexes with namespaces, batch
+upserts, metadata filters, sparse, keyword and hybrid search, see
+[Vector indexes](#vector-indexes).
+
 ### Search text
 
 Index the description explicitly, then use ranked BM25 search. Search defaults
@@ -211,6 +215,96 @@ This excerpt uses `db`, `schema` and the lazy `rows` producer from the
 [complete example](examples/bulk-and-scan.mjs). See the [bulk and pagination guide](docs/bulk-and-pagination.md)
 for setup, reads, checkpoints, cancellation and recovery. Failed writes are never
 replayed automatically; paginated reads require a unique immutable string key.
+
+## Vector indexes
+
+`db.vectorIndexes` holds the record operations on vector indexes. An index holds
+namespaces, and a namespace holds records. A record has an `id` and any of a
+dense vector (`values`), a sparse vector (`sparse_values`), flat `metadata` and
+declared `text` fields. Every call takes the index by its name or its
+`index_id`, and record calls always name a namespace (`"__default__"` is the
+default one). Request fields use the server's snake_case names, like the
+responses; options that only steer the client (`batchSize`, `maxBytes`,
+`signal`) are camelCase.
+
+```typescript
+const vi = db.vectorIndexes;
+
+// Create an index. metric is "cosine", "dot", "l2" or "manhattan".
+await vi.createIndex("products", { dimension: 4, metric: "cosine", sparse: true,
+  text_fields: [{ name: "body", analyzer: "standard_en_v1" }] });
+await vi.describeIndex("products");
+for await (const index of vi.iterIndexes()) console.log(index.name, index.state);
+
+// Upsert replaces the whole record. The namespace is created on first write.
+await vi.upsert("products", "catalog", [
+  { id: "p1", values: [0.1, 0.2, 0.3, 0.4],
+    metadata: { category: "tools", price: 12.5 }, text: { body: "steel claw hammer" } },
+  { id: "p2", values: [0.4, 0.3, 0.2, 0.1],
+    sparse_values: { indices: [3, 9], values: [0.2, 0.5] }, metadata: { category: "garden" } },
+]);
+
+// Dense search with a metadata filter.
+const res = await vi.search("products", "catalog", { k: 5, vector: [0.1, 0.2, 0.3, 0.4],
+  filter_expr: { category: { $eq: "tools" }, price: { $lt: 20 } }, include_metadata: true });
+for (const hit of res.hits) console.log(hit.id, hit.score, hit.metadata);
+
+// Hybrid search: dense + keyword (BM25), fused by reciprocal rank.
+await vi.search("products", "catalog", { k: 5, vector: [0.1, 0.2, 0.3, 0.4],
+  lexical: { field: "body", query: "hammer" } });
+// Search by the stored vector of a record; or a sparse query.
+await vi.search("products", "catalog", { k: 5, record_id: "p1", quality: "exact" });
+await vi.search("products", "catalog", { k: 5, sparse: { indices: [3], values: [1.0] } });
+
+const got = await vi.fetch("products", "catalog", ["p1", "p9"], { include_values: true });
+// got.records is keyed by id; got.missing lists the ids not found.
+await vi.update("products", "catalog", "p1", { metadata_merge: { price: 11.0 } });
+await vi.count("products", "catalog", { filter_expr: { category: { $eq: "tools" } } });
+for await (const id of vi.iterIds("products", "catalog")) console.log(id);
+
+await vi.delete("products", "catalog", ["p2"]);
+const job = await vi.deleteByFilter("products", "catalog",
+  { filter_expr: { category: { $eq: "garden" } } });
+await vi.getJob("products", job.job_id!);         // poll until state is not queued/running
+await vi.indexStats("products");
+await vi.deleteNamespace("products", "catalog");   // deletes every record in it
+await vi.deleteIndex("products");                  // answers with state "deleting"
+```
+
+Things to know:
+
+- **Batching.** The server accepts at most 1,000 records and 2,000,000 bytes
+  per upsert request. `upsert` reads its input (an array, any iterable or an
+  async iterable) lazily, sends it in requests under both bounds, in order, each
+  record exactly once, and resolves to `{ upserted_count, namespace_created,
+  batches, receipts }`. Each request commits on its own. A failure rejects with
+  `BatchWriteError` naming the input range that was not acknowledged (`offset`,
+  `count`, and `outcome` `not_sent` or `unknown`); every record before `offset`
+  is written, and the underlying error is its `cause`. Nothing is sent again
+  automatically. `upsertBatches` yields one result per acknowledged request
+  instead.
+- **Search.** `k` is required. One query leg is a semantic (dense or sparse) or
+  keyword search; two or more legs are a hybrid search. `quality` is `"fast"`,
+  `"high_recall"` (the default) or `"exact"`. Scores are always
+  higher-is-better; `res.completeness` says whether an approximate leg may have
+  missed records. Search returns metadata only with `include_metadata: true`;
+  `fetch` returns it unless you turn it off.
+- **Filters.** `filter_expr` takes operators such as `$eq`, `$ne`, `$in`, `$gt`,
+  `$exists`, `$and` and `$or`; `filter` takes a plain equality map. Pass at most
+  one.
+- **Updates and deletes.** `update` changes one record in place and keeps the
+  fields it does not name. `updateByFilter` and `deleteByFilter` run as
+  background jobs; `dry_run: true` only reports how many records match. Calling
+  `deleteNamespace` or `deleteAll` is the confirmation the server asks for.
+- **Paging.** `iterIndexes`, `iterNamespaces`, `iterIds` and `iterRecords` are
+  async iterators that hold one page in memory and do not prefetch. They are
+  not snapshots.
+- **Errors and retries.** Failures reject with `ApiError`. Branch on
+  `error.code` plus `error.reason`, not on `error.status` alone;
+  `error.details` holds the rest and `error.retryable` says whether the same
+  request can succeed later. A database that does not serve these operations
+  rejects with `OCRecordApiNotEnabledError` (a 501). With `maxRetries` set,
+  reads are retried; writes never are.
 
 ## Understanding SQL results
 

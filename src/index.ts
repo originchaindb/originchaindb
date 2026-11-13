@@ -17,6 +17,7 @@ export {
   ApiError,
   OCAddonRequiredError,
   OCPaymentRequiredError,
+  OCRecordApiNotEnabledError,
   isAddonRequiredBody,
 } from "./errors.js";
 
@@ -93,3 +94,47 @@ export type { VectorHit } from "./vector.js";
 
 export { BatchWriteError } from "./iteration.js";
 export type { BatchResult, BatchOptions, RowPage, PageOptions } from "./iteration.js";
+
+export {
+  VectorIndexes,
+  VECTOR_INDEX_DEFAULT_NAMESPACE,
+  VECTOR_INDEX_UPSERT_MAX_BODY_BYTES,
+  VECTOR_INDEX_UPSERT_MAX_RECORDS,
+} from "./vector-indexes.js";
+export type {
+  VectorIndex,
+  VectorIndexAnswer,
+  VectorIndexChanges,
+  VectorIndexCount,
+  VectorIndexDeleteByFilter,
+  VectorIndexDeleteResult,
+  VectorIndexFetchByFilter,
+  VectorIndexFetchResult,
+  VectorIndexFilter,
+  VectorIndexFilterJob,
+  VectorIndexIdPage,
+  VectorIndexJob,
+  VectorIndexMetric,
+  VectorIndexNamespace,
+  VectorIndexNamespacePage,
+  VectorIndexPage,
+  VectorIndexProjection,
+  VectorIndexRecord,
+  VectorIndexRecordPage,
+  VectorIndexRequestOptions,
+  VectorIndexSearch,
+  VectorIndexSearchHit,
+  VectorIndexSearchQuality,
+  VectorIndexSearchResult,
+  VectorIndexSparseValues,
+  VectorIndexSpec,
+  VectorIndexStats,
+  VectorIndexStoredRecord,
+  VectorIndexTextField,
+  VectorIndexUpdate,
+  VectorIndexUpdateByFilter,
+  VectorIndexUpsertBatch,
+  VectorIndexUpsertOptions,
+  VectorIndexUpsertResult,
+  VectorIndexValues,
+} from "./vector-indexes.js";
